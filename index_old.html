@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracking: Desafio 600km</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; background: #e0e0e0; }
+        
+        .painel { 
+            position: absolute; top: 15px; left: 15px; z-index: 1000; 
+            background: rgba(255, 255, 255, 0.95); padding: 15px; 
+            border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); 
+            max-width: 260px;
+        }
+        h2 { margin: 0; font-size: 18px; color: #333; display: flex; align-items: center; gap: 8px; }
+        #status { font-size: 13px; color: #666; margin: 10px 0; line-height: 1.4; }
+        .legenda { font-size: 11px; border-top: 1px solid #ddd; pt: 8px; margin-top: 8px; }
+        .item-legenda { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+        .cor-rota { width: 15px; height: 3px; background: #888; border-radius: 2px; }
+        .cor-rastro { width: 15px; height: 3px; background: #007bff; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+    <div class="painel">
+        <h2>🚴 Desafio 600km</h2>
+        <div id="status">Iniciando mapa...</div>
+        <div class="legenda">
+            <div class="item-legenda"><span class="cor-rota"></span> Rota Planejada</div>
+            <div class="item-legenda"><span class="cor-rastro"></span> Meu Progresso</div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Bibliotecas -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
+
+    <script>
+        // Configurações do seu Supabase
+        const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Inicializa o mapa focado no Brasil por padrão
+        const map = L.map('map').setView([-23.55, -46.63], 10);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // 1. Carrega a Rota GPX (Arquivo local percurso.gpx)
+        const rotaGpx = new L.GPX("percurso.gpx", {
+            async: true,
+            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null },
+            polyline_options: { color: '#888', opacity: 0.5, weight: 6 }
+        }).on('loaded', function(e) {
+            map.fitBounds(e.target.getBounds());
+            document.getElementById('status').innerText = "Rota carregada. Aguardando posição do atleta...";
+        }).on('error', function() {
+            document.getElementById('status').innerText = "Aviso: Arquivo GPX não encontrado ou erro de CORS.";
+        }).addTo(map);
+
+        // 2. Camadas para o seu progresso real
+        let rastroReal = L.polyline([], {color: '#007bff', weight: 6, opacity: 0.9}).addTo(map);
+        let markerAtleta = L.marker([0,0]).addTo(map);
+
+        async function buscarProgresso() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('posicoes')
+                    .select('*')
+                    .eq('desafio_id', 'brm600')
+                    .order('created_at', { ascending: true });
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const pontos = data.map(p => [p.lat, p.lng]);
+                    rastroReal.setLatLngs(pontos);
+                    
+                    const ultima = data[data.length - 1];
+                    const novaPos = [ultima.lat, ultima.lng];
+                    markerAtleta.setLatLng(novaPos);
+                    
+                    const dataHora = new Date(ultima.created_at).toLocaleString('pt-BR');
+                    document.getElementById('status').innerHTML = `<b>Última atualização:</b><br>${dataHora}`;
+                    markerAtleta.bindPopup(`<b>Estou aqui!</b><br>${dataHora}`);
+                }
+            } catch (err) {
+                console.error("Erro ao buscar dados:", err.message);
+            }
+        }
+
+        // Atualiza a cada 1 minuto
+        buscarProgresso();
+        setInterval(buscarProgresso, 60000);
+    </script>
+</body>
+</html>

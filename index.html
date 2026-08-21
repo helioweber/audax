@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal do Ciclista - Meus Desafios</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #2c3e50; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; width: 100%; max-width: 1000px; margin-top: 30px; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; border-top: 5px solid #27ae60; }
+        .card h3 { margin-top: 0; color: #333; }
+        .card p { color: #666; font-size: 14px; }
+        .btn { display: inline-block; padding: 10px 20px; background: #27ae60; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
+        .btn:hover { background: #219150; }
+        #carregando { color: #666; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚴 Meus Desafios de Ciclismo</h1>
+    <p>Acompanhe meu progresso em tempo real nos eventos abaixo:</p>
+
+    <div id="carregando">Carregando desafios...</div>
+    <div id="lista-desafios" class="grid"></div>
+
+    <!-- BIBLIOTECA SUPABASE -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function carregarPortal() {
+            try {
+                const { data: desafios, error } = await supabaseClient
+                    .from('desafios')
+                    .select('*')
+                    .eq('ativo', true)
+                    .order('data_inicio', { ascending: false });
+
+                if (error) throw error;
+
+                const container = document.getElementById('lista-desafios');
+                const loadingMsg = document.getElementById('carregando');
+                
+                if (desafios.length === 0) {
+                    loadingMsg.innerText = "Nenhum desafio ativo no momento.";
+                    return;
+                }
+
+                loadingMsg.style.display = 'none';
+                desafios.forEach(d => {
+                    container.innerHTML += `
+                        <div class="card">
+                            <h3>${d.nome}</h3>
+                            <p>📅 Data: ${new Date(d.data_inicio).toLocaleDateString('pt-BR')}</p>
+                            <p>📏 Distância: ${d.distancia_km}km</p>
+                            <a href="mapa.html?id=${d.id}" class="btn">VER MAPA EM TEMPO REAL</a>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+                document.getElementById('carregando').innerText = "Erro ao carregar desafios. Verifique o console.";
+            }
+        }
+
+        carregarPortal();
+    </script>
+</body>
+</html>

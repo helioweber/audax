@@ -3,60 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Ciclista</title>
+    <title>Dashboard Ciclista Dinâmico</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; font-family: -apple-system, sans-serif; background: #eee; }
         #map { height: 100vh; width: 100%; z-index: 1; }
-        
-        .painel { 
-            position: absolute; top: 15px; left: 15px; z-index: 1000; 
-            background: white; padding: 20px; border-radius: 15px; 
-            box-shadow: 0 4px 25px rgba(0,0,0,0.15); width: 280px;
-        }
+        .painel { position: absolute; top: 15px; left: 15px; z-index: 1000; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 25px rgba(0,0,0,0.15); width: 280px; }
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
         .stat-card { background: #f8f9fa; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #eee; }
         .stat-value { display: block; font-size: 18px; font-weight: bold; color: #27ae60; }
         .stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        /* Estilo do Timer */
-        .timer-box { 
-            margin-top: 15px; background: #2c3e50; color: white; 
-            padding: 12px; border-radius: 8px; text-align: center;
-            display: none; /* Escondido por padrão */
-        }
+        .timer-box { margin-top: 15px; background: #2c3e50; color: white; padding: 12px; border-radius: 8px; text-align: center; display: none; }
         #tempo-restante { font-size: 22px; font-weight: bold; font-family: 'Courier New', monospace; color: #f1c40f; }
-        
         .voltar { color: #27ae60; text-decoration: none; font-size: 11px; font-weight: bold; display: block; margin-bottom: 8px; }
         #status { font-size: 11px; color: #999; margin-top: 10px; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
     </style>
 </head>
 <body>
-
     <div class="painel">
         <a href="index.html" class="voltar">⬅ VOLTAR AO PORTAL</a>
         <h2 id="titulo-prova" style="margin:0; font-size: 18px; color: #333; line-height: 1.2;">Carregando...</h2>
-        
         <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-value" id="dist-percorrida">0.0</span>
-                <span class="stat-label">KM Percorridos</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value" id="dist-restante">--</span>
-                <span class="stat-label">KM Restantes</span>
-            </div>
+            <div class="stat-card"><span class="stat-value" id="dist-percorrida">0.0</span><span class="stat-label">KM Percorridos</span></div>
+            <div class="stat-card"><span class="stat-value" id="dist-restante">--</span><span class="stat-label">KM Restantes</span></div>
         </div>
-
-        <!-- A caixa do Timer agora tem um ID para controle -->
         <div id="caixa-timer" class="timer-box">
-            <div class="stat-label" style="color: #bdc3c7; margin-bottom: 5px;">Tempo para o Corte (40h)</div>
+            <div id="label-tempo" class="stat-label" style="color: #bdc3c7; margin-bottom: 5px;">Tempo para o Corte</div>
             <div id="tempo-restante">00:00:00</div>
         </div>
-
         <div id="status">Buscando última posição...</div>
     </div>
-
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -67,11 +43,9 @@
         const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
         const urlParams = new URLSearchParams(window.location.search);
         const desafioId = urlParams.get('id') || 'brm600';
 
-        // Correção de Ícones
         delete L.Icon.Default.prototype._getIconUrl;
         L.Icon.Default.mergeOptions({
             iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -82,7 +56,6 @@
         const map = L.map('map').setView([-23.55, -46.63], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        // Lógica de Rota GPX (Apenas para o BRM 600)
         if (desafioId === 'brm600') {
             new L.GPX("percurso.gpx", {
                 async: true,
@@ -102,11 +75,37 @@
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        async function atualizarMapa() {
+        async function atualizarDados() {
             try {
+                // 1. Busca os dados do desafio (incluindo tempo)
                 const { data: desafio } = await supabaseClient.from('desafios').select('*').eq('id', desafioId).single();
-                if(desafio) document.getElementById('titulo-prova').innerText = desafio.nome;
+                if(!desafio) return;
 
+                document.getElementById('titulo-prova').innerText = desafio.nome;
+
+                // 2. Lógica do Timer Dinâmico
+                const timerBox = document.getElementById('caixa-timer');
+                if (desafio.hora_largada && desafio.tempo_limite_horas) {
+                    timerBox.style.display = 'block';
+                    document.getElementById('label-tempo').innerText = `Tempo para o Corte (${desafio.tempo_limite_horas}h)`;
+                    
+                    const largada = new Date(desafio.hora_largada);
+                    const limite = new Date(largada.getTime() + (desafio.tempo_limite_horas * 60 * 60 * 1000));
+                    
+                    const diff = limite - new Date();
+                    if (diff <= 0) {
+                        document.getElementById('tempo-restante').innerText = "ENCERRADO";
+                    } else {
+                        const h = Math.floor(diff / 3600000);
+                        const m = Math.floor((diff % 3600000) / 60000);
+                        const s = Math.floor((diff % 60000) / 1000);
+                        document.getElementById('tempo-restante').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                    }
+                } else {
+                    timerBox.style.display = 'none';
+                }
+
+                // 3. Busca posições e calcula distância
                 const { data: posicoes } = await supabaseClient.from('posicoes').select('*').eq('desafio_id', desafioId).order('created_at', { ascending: true });
 
                 if (posicoes && posicoes.length > 0) {
@@ -117,8 +116,7 @@
                     }
                     document.getElementById('dist-percorrida').innerText = distTotal.toFixed(1);
                     if(desafio.distancia_km) {
-                        const restante = Math.max(0, desafio.distancia_km - distTotal);
-                        document.getElementById('dist-restante').innerText = restante.toFixed(1);
+                        document.getElementById('dist-restante').innerText = Math.max(0, desafio.distancia_km - distTotal).toFixed(1);
                     }
                     const ultima = posicoes[posicoes.length - 1];
                     markerAtleta.setLatLng([ultima.lat, ultima.lng]);
@@ -127,38 +125,8 @@
             } catch (err) { console.error(err); }
         }
 
-        // LÓGICA DO TIMER INTELIGENTE
-        function gerenciarTimer() {
-            const timerBox = document.getElementById('caixa-timer');
-            
-            // Só mostra e inicia se for o desafio BRM600
-            if (desafioId === 'brm600') {
-                timerBox.style.display = 'block';
-                
-                const largada = new Date('2026-10-09T07:00:00-03:00');
-                const limite = new Date(largada.getTime() + (40 * 60 * 60 * 1000));
-                
-                function tick() {
-                    const diff = limite - new Date();
-                    if (diff <= 0) {
-                        document.getElementById('tempo-restante').innerText = "ENCERRADO";
-                        return;
-                    }
-                    const h = Math.floor(diff / 3600000);
-                    const m = Math.floor((diff % 3600000) / 60000);
-                    const s = Math.floor((diff % 60000) / 1000);
-                    document.getElementById('tempo-restante').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-                }
-                setInterval(tick, 1000);
-                tick();
-            } else {
-                timerBox.style.display = 'none';
-            }
-        }
-
-        atualizarMapa();
-        gerenciarTimer();
-        setInterval(atualizarMapa, 60000);
+        atualizarDados();
+        setInterval(atualizarDados, 1000); // Atualiza o relógio a cada segundo
     </script>
 </body>
 </html>

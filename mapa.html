@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Audax 600km</title>
+    <title>Dashboard Ciclista</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; font-family: -apple-system, sans-serif; background: #eee; }
         #map { height: 100vh; width: 100%; z-index: 1; }
         
-        /* NOVO PAINEL ESTILIZADO */
         .painel { 
             position: absolute; top: 15px; left: 15px; z-index: 1000; 
             background: white; padding: 20px; border-radius: 15px; 
@@ -20,13 +19,16 @@
         .stat-value { display: block; font-size: 18px; font-weight: bold; color: #27ae60; }
         .stat-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
         
+        /* Estilo do Timer */
         .timer-box { 
             margin-top: 15px; background: #2c3e50; color: white; 
             padding: 12px; border-radius: 8px; text-align: center;
+            display: none; /* Escondido por padrão */
         }
         #tempo-restante { font-size: 22px; font-weight: bold; font-family: 'Courier New', monospace; color: #f1c40f; }
+        
         .voltar { color: #27ae60; text-decoration: none; font-size: 11px; font-weight: bold; display: block; margin-bottom: 8px; }
-        #status { font-size: 11px; color: #999; margin-top: 10px; text-align: center; border-top: 1px solid #eee; pt: 8px; }
+        #status { font-size: 11px; color: #999; margin-top: 10px; text-align: center; border-top: 1px solid #eee; padding-top: 8px; }
     </style>
 </head>
 <body>
@@ -46,7 +48,8 @@
             </div>
         </div>
 
-        <div class="timer-box">
+        <!-- A caixa do Timer agora tem um ID para controle -->
+        <div id="caixa-timer" class="timer-box">
             <div class="stat-label" style="color: #bdc3c7; margin-bottom: 5px;">Tempo para o Corte (40h)</div>
             <div id="tempo-restante">00:00:00</div>
         </div>
@@ -61,7 +64,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.7.0/gpx.min.js"></script>
 
     <script>
-        // 1. CONFIGURAÇÕES (Use suas chaves anon aqui)
         const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -69,7 +71,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const desafioId = urlParams.get('id') || 'brm600';
 
-        // 2. CORREÇÃO DOS ÍCONES (Para sumir o erro "Marke")
+        // Correção de Ícones
         delete L.Icon.Default.prototype._getIconUrl;
         L.Icon.Default.mergeOptions({
             iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
@@ -77,43 +79,29 @@
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
         });
 
-        // 3. MAPA E ROTA GPX
         const map = L.map('map').setView([-23.55, -46.63], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+        // Lógica de Rota GPX (Apenas para o BRM 600)
         if (desafioId === 'brm600') {
-	new L.GPX("percurso.gpx", {
-            async: true,
-        marker_options: { 
-        startIconUrl: null, 
-        endIconUrl: null, 
-        shadowUrl: null,
-        wptIconUrls: { '': null } // Isso remove os ícones de Waypoints do GPX
-    },    
-	polyline_options: { color: 'red', opacity: 0.6, weight: 6 }
-        }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(map);
-	
-	} else {
- 	   // Se não tem GPX, foca o mapa na sua última posição ou em um ponto padrão
-    	document.getElementById('status').innerText = "Sem rota fixa. Aguardando sinal...";
-	}
+            new L.GPX("percurso.gpx", {
+                async: true,
+                marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: { '': null } },
+                polyline_options: { color: 'red', opacity: 0.6, weight: 6 }
+            }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(map);
+        }
 
         let rastroReal = L.polyline([], {color: '#007bff', weight: 6}).addTo(map);
         let markerAtleta = L.marker([0,0]).addTo(map);
 
-        // 4. FUNÇÃO DISTÂNCIA (Haversine)
         function calcularDistancia(lat1, lon1, lat2, lon2) {
             const R = 6371;
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                      Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // 5. ATUALIZAÇÃO DOS DADOS
         async function atualizarMapa() {
             try {
                 const { data: desafio } = await supabaseClient.from('desafios').select('*').eq('id', desafioId).single();
@@ -123,18 +111,15 @@
 
                 if (posicoes && posicoes.length > 0) {
                     rastroReal.setLatLngs(posicoes.map(p => [p.lat, p.lng]));
-                    
                     let distTotal = 0;
                     for (let i = 1; i < posicoes.length; i++) {
                         distTotal += calcularDistancia(posicoes[i-1].lat, posicoes[i-1].lng, posicoes[i].lat, posicoes[i].lng);
                     }
-
                     document.getElementById('dist-percorrida').innerText = distTotal.toFixed(1);
                     if(desafio.distancia_km) {
                         const restante = Math.max(0, desafio.distancia_km - distTotal);
                         document.getElementById('dist-restante').innerText = restante.toFixed(1);
                     }
-
                     const ultima = posicoes[posicoes.length - 1];
                     markerAtleta.setLatLng([ultima.lat, ultima.lng]);
                     document.getElementById('status').innerText = "Sinal: " + new Date(ultima.created_at).toLocaleTimeString();
@@ -142,32 +127,37 @@
             } catch (err) { console.error(err); }
         }
 
-        // 6. TIMER REGRESSIVO (LARGADA 09/10/2026 07:00)
-        function iniciarTimer() {
-            const largada = new Date('2026-10-09T07:00:00-03:00');
-            const limite = new Date(largada.getTime() + (40 * 60 * 60 * 1000));
+        // LÓGICA DO TIMER INTELIGENTE
+        function gerenciarTimer() {
+            const timerBox = document.getElementById('caixa-timer');
             
-            function tick() {
-                const agora = new Date();
-                const diff = limite - agora;
+            // Só mostra e inicia se for o desafio BRM600
+            if (desafioId === 'brm600') {
+                timerBox.style.display = 'block';
                 
-                if (diff <= 0) {
-                    document.getElementById('tempo-restante').innerText = "ENCERRADO";
-                    return;
+                const largada = new Date('2026-10-09T07:00:00-03:00');
+                const limite = new Date(largada.getTime() + (40 * 60 * 60 * 1000));
+                
+                function tick() {
+                    const diff = limite - new Date();
+                    if (diff <= 0) {
+                        document.getElementById('tempo-restante').innerText = "ENCERRADO";
+                        return;
+                    }
+                    const h = Math.floor(diff / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    const s = Math.floor((diff % 60000) / 1000);
+                    document.getElementById('tempo-restante').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                 }
-
-                const h = Math.floor(diff / 3600000);
-                const m = Math.floor((diff % 3600000) / 60000);
-                const s = Math.floor((diff % 60000) / 1000);
-                document.getElementById('tempo-restante').innerText = 
-                    `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                setInterval(tick, 1000);
+                tick();
+            } else {
+                timerBox.style.display = 'none';
             }
-            setInterval(tick, 1000);
-            tick();
         }
 
         atualizarMapa();
-        iniciarTimer();
+        gerenciarTimer();
         setInterval(atualizarMapa, 60000);
     </script>
 </body>

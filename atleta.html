@@ -3,67 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel do Atleta</title>
+    <title>Painel do Atleta - GPS</title>
     <style>
         body { 
-            background: #121212; color: white; font-family: sans-serif;
+            background: #121212; color: white; font-family: -apple-system, sans-serif;
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100vh; margin: 0;
         }
-        .btn-enviar {
-            width: 200px; height: 200px; border-radius: 50%; border: none;
-            background: #27ae60; color: white; font-weight: bold; font-size: 1.2rem;
-            box-shadow: 0 0 20px rgba(39, 174, 96, 0.4); cursor: pointer;
-            active: transform: scale(0.95);
+        .container { text-align: center; width: 90%; }
+        
+        #id-evento { 
+            color: #27ae60; font-weight: bold; font-size: 14px; 
+            margin-bottom: 20px; text-transform: uppercase;
         }
-        #msg { margin-top: 30px; font-size: 0.9rem; color: #bbb; text-align: center; padding: 0 20px; }
+
+        .btn-enviar {
+            width: 220px; height: 220px; border-radius: 50%; border: none;
+            background: #27ae60; color: white; font-weight: bold; font-size: 1.4rem;
+            box-shadow: 0 0 30px rgba(39, 174, 96, 0.4); cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .btn-enviar:active { transform: scale(0.92); background: #219150; }
+        .btn-enviar:disabled { background: #555; box-shadow: none; }
+
+        #msg { margin-top: 30px; font-size: 1rem; line-height: 1.4; color: #bbb; min-height: 3em; }
+        .instrucao { margin-top: 40px; font-size: 12px; color: #666; }
     </style>
 </head>
 <body>
 
-    <button class="btn-enviar" onclick="enviarPosicao()">REPORTAR<br>POSIÇÃO</button>
-    <div id="msg">Toque no botão para enviar sua localização atual.</div>
+    <div class="container">
+        <div id="id-evento">Carregando evento...</div>
+        
+        <button class="btn-enviar" onclick="enviarPosicao()">REPORTAR<br>POSIÇÃO</button>
+        
+        <div id="msg">Toque no botão para enviar sua localização.</div>
 
+        <div class="instrucao">
+            Certifique-se de que o GPS está ativado e que você permitiu o acesso à localização no navegador.
+        </div>
+    </div>
+
+    <!-- BIBLIOTECA SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <script>
+        // 1. CONFIGURAÇÕES DO SEU SUPABASE
         const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        // 2. CAPTURAR O ID DO EVENTO NA URL
+        // Exemplo: atleta.html?id=treino-domingo
+        const urlParams = new URLSearchParams(window.location.search);
+        const desafioId = urlParams.get('id') || 'brm600'; // Se não tiver id na URL, usa brm600
+        
+        document.getElementById('id-evento').innerText = "Evento: " + desafioId;
+
+        // 3. FUNÇÃO PARA ENVIAR A POSIÇÃO
         function enviarPosicao() {
             const btn = document.querySelector('.btn-enviar');
             const msg = document.getElementById('msg');
             
             btn.disabled = true;
-            btn.style.background = "#555";
-            msg.innerText = "Obtendo GPS...";
+            msg.innerHTML = "<span style='color: #f1c40f;'>Obtendo GPS...</span>";
 
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const { latitude, longitude, altitude, speed } = pos.coords;
 
+                // Envia para a tabela 'posicoes' do Supabase
                 const { error } = await supabaseClient.from('posicoes').insert([
                     { 
                         lat: latitude, 
                         lng: longitude, 
                         altitude: altitude, 
                         velocidade: speed,
-                        desafio_id: 'brm600'
+                        desafio_id: desafioId // <--- Usa o ID capturado da URL
                     }
                 ]);
 
                 if (error) {
-                    msg.innerText = "Erro no banco: " + error.message;
-                    btn.style.background = "#e74c3c";
+                    msg.innerHTML = "<span style='color: #e74c3c;'>Erro ao salvar: " + error.message + "</span>";
                 } else {
-                    msg.innerText = "Sucesso! Enviado às " + new Date().toLocaleTimeString();
-                    btn.style.background = "#27ae60";
+                    msg.innerHTML = "<span style='color: #2ecc71;'>Sucesso!<br>" + new Date().toLocaleTimeString() + "</span>";
                 }
                 btn.disabled = false;
             }, (err) => {
-                msg.innerText = "Erro de GPS: " + err.message;
-                btn.style.background = "#e74c3c";
+                let erroTxt = "Erro de GPS";
+                if(err.code === 1) erroTxt = "Acesso ao GPS negado.";
+                if(err.code === 2) erroTxt = "Posição indisponível.";
+                if(err.code === 3) erroTxt = "Tempo esgotado.";
+                
+                msg.innerHTML = "<span style='color: #e74c3c;'>" + erroTxt + "</span>";
                 btn.disabled = false;
-            }, { enableHighAccuracy: true });
+            }, { 
+                enableHighAccuracy: true, // Força o uso de GPS de alta precisão
+                timeout: 10000, 
+                maximumAge: 0 
+            });
         }
     </script>
 </body>

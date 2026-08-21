@@ -81,7 +81,8 @@
         const map = L.map('map').setView([-23.55, -46.63], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        new L.GPX("percurso.gpx", {
+        if (desafioId === 'brm600') {
+	new L.GPX("percurso.gpx", {
             async: true,
         marker_options: { 
         startIconUrl: null, 
@@ -91,6 +92,11 @@
     },    
 	polyline_options: { color: 'red', opacity: 0.6, weight: 6 }
         }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(map);
+	
+	} else {
+ 	   // Se não tem GPX, foca o mapa na sua última posição ou em um ponto padrão
+    	document.getElementById('status').innerText = "Sem rota fixa. Aguardando sinal...";
+	}
 
         let rastroReal = L.polyline([], {color: '#007bff', weight: 6}).addTo(map);
         let markerAtleta = L.marker([0,0]).addTo(map);

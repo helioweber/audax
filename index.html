@@ -3,37 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal do Ciclista - Meus Desafios</title>
+    <title>Hélio Weber - Portal de Desafios</title>
+    
+    <!-- Google Fonts para um visual moderno -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { color: #2c3e50; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; width: 100%; max-width: 1000px; margin-top: 30px; }
-        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; border-top: 5px solid #27ae60; }
-        .card h3 { margin-top: 0; color: #333; }
-        .card p { color: #666; font-size: 14px; }
-        .btn { display: inline-block; padding: 10px 20px; background: #27ae60; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
-        .btn:hover { background: #219150; }
-        #carregando { color: #666; margin-top: 50px; }
+        :root {
+            --primary: #27ae60;
+            --bg: #f4f7f6;
+            --text: #2c3e50;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg); 
+            color: var(--text);
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            max-width: 800px;
+        }
+
+        h1 { margin: 0; font-size: 2.5rem; color: var(--text); }
+        header p { color: #666; font-size: 1.1rem; }
+
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); 
+            gap: 25px; 
+            width: 100%; 
+            max-width: 1100px; 
+        }
+
+        .card { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05); 
+            text-align: center; 
+            border-top: 6px solid var(--primary);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h3 { margin-top: 0; font-size: 1.4rem; color: #333; }
+        
+        .info-row {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 15px 0;
+            font-size: 0.95rem;
+            color: #555;
+        }
+
+        .btn { 
+            display: inline-block; 
+            padding: 12px 25px; 
+            background-color: var(--primary); 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 12px; 
+            font-weight: bold; 
+            font-size: 0.9rem;
+            transition: background 0.3s;
+        }
+
+        .btn:hover { background-color: #219150; }
+
+        #carregando { 
+            font-weight: bold;
+            color: #888;
+            margin-top: 50px;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            .grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
 
-    <h1>🚴 Meus Desafios de Ciclismo</h1>
-    <p>Acompanhe meu progresso em tempo real nos eventos abaixo:</p>
+    <header>
+        <h1>🚴 Meus Desafios</h1>
+        <p>Acompanhe meu progresso e localização em tempo real nos eventos abaixo</p>
+    </header>
 
-    <div id="carregando">Carregando desafios...</div>
+    <div id="carregando">Buscando desafios no banco de dados...</div>
+    
     <div id="lista-desafios" class="grid"></div>
 
     <!-- BIBLIOTECA SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
+        // CONFIGURAÇÕES DO SUPABASE
         const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         async function carregarPortal() {
             try {
+                // Busca desafios ativos, do mais recente para o mais antigo
                 const { data: desafios, error } = await supabaseClient
                     .from('desafios')
                     .select('*')
@@ -45,28 +128,39 @@
                 const container = document.getElementById('lista-desafios');
                 const loadingMsg = document.getElementById('carregando');
                 
-                if (desafios.length === 0) {
-                    loadingMsg.innerText = "Nenhum desafio ativo no momento.";
+                if (!desafios || desafios.length === 0) {
+                    loadingMsg.innerText = "Nenhum desafio ativo encontrado.";
                     return;
                 }
 
                 loadingMsg.style.display = 'none';
+                container.innerHTML = ""; 
+
                 desafios.forEach(d => {
+                    // --- CORREÇÃO DE FUSO HORÁRIO ---
+                    // Ignora o objeto Date e trata apenas como texto (split)
+                    const partesData = d.data_inicio.split('-'); 
+                    const dataFormatada = `${partesData[2]}/${partesData[1]}/${partesData[0]}`;
+                    // -------------------------------
+
                     container.innerHTML += `
                         <div class="card">
                             <h3>${d.nome}</h3>
-                            <p>📅 Data: ${new Date(d.data_inicio).toLocaleDateString('pt-BR')}</p>
-                            <p>📏 Distância: ${d.distancia_km}km</p>
+                            <div class="info-row">
+                                <span>📅 ${dataFormatada}</span>
+                                <span>📏 ${d.distancia_km}km</span>
+                            </div>
                             <a href="mapa.html?id=${d.id}" class="btn">VER MAPA EM TEMPO REAL</a>
                         </div>
                     `;
                 });
             } catch (err) {
-                console.error(err);
-                document.getElementById('carregando').innerText = "Erro ao carregar desafios. Verifique o console.";
+                console.error("Erro ao carregar portal:", err);
+                document.getElementById('carregando').innerText = "Erro ao conectar com o banco de dados.";
             }
         }
 
+        // Inicia o carregamento
         carregarPortal();
     </script>
 </body>

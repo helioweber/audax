@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Ciclista Dinâmico</title>
+    <title>Tracking Audax - Hélio Weber</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; font-family: -apple-system, sans-serif; background: #eee; }
@@ -31,7 +31,7 @@
             <div id="label-tempo" class="stat-label" style="color: #bdc3c7; margin-bottom: 5px;">Tempo para o Corte</div>
             <div id="tempo-restante">00:00:00</div>
         </div>
-        <div id="status">Buscando última posição...</div>
+        <div id="status">Buscando check-ins...</div>
     </div>
     <div id="map"></div>
 
@@ -43,29 +43,45 @@
         const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
         const urlParams = new URLSearchParams(window.location.search);
         const desafioId = urlParams.get('id') || 'brm600';
 
-        delete L.Icon.Default.prototype._getIconUrl;
-        L.Icon.Default.mergeOptions({
-            iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+        // 1. DEFINIÇÃO DO ÍCONE DE BIKE
+        const bikeIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/31/31238.png', // Ícone de Bike preto
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -15]
+        });
+
+        const bikeIconAtual = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/31/31238.png', 
+            iconSize: [45, 45], // Bike maior para a posição atual
+            iconAnchor: [22, 22],
+            className: 'marker-atual' // Podemos usar CSS para dar um brilho nela
         });
 
         const map = L.map('map').setView([-23.55, -46.63], 10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        if (desafioId === 'brm600') {
-            new L.GPX("percurso.gpx", {
-                async: true,
-                marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: { '': null } },
-                polyline_options: { color: 'red', opacity: 0.6, weight: 6 }
-            }).on('loaded', e => map.fitBounds(e.target.getBounds())).addTo(map);
-        }
+        // 2. CARREGAMENTO DO GPX PADRONIZADO (nome_do_evento.gpx)
+        let gpxCarregado = false;
+        const gpxFile = `${desafioId}.gpx`;
 
-        let rastroReal = L.polyline([], {color: '#007bff', weight: 6}).addTo(map);
-        let markerAtleta = L.marker([0,0]).addTo(map);
+        new L.GPX(gpxFile, {
+            async: true,
+            marker_options: { startIconUrl: null, endIconUrl: null, shadowUrl: null, wptIconUrls: { '': null } },
+            polyline_options: { color: 'red', opacity: 0.6, weight: 6 }
+        }).on('loaded', e => {
+            map.fitBounds(e.target.getBounds());
+            gpxCarregado = true;
+        }).on('error', () => {
+            console.log("Sem arquivo GPX para este evento: " + gpxFile);
+        }).addTo(map);
+
+        let rastroReal = L.polyline([], {color: '#007bff', weight: 4, dashArray: '5, 10'}).addTo(map);
+        let markersGroup = L.layerGroup().addTo(map);
 
         function calcularDistancia(lat1, lon1, lat2, lon2) {
             const R = 6371;
@@ -77,56 +93,60 @@
 
         async function atualizarDados() {
             try {
-                // 1. Busca os dados do desafio (incluindo tempo)
                 const { data: desafio } = await supabaseClient.from('desafios').select('*').eq('id', desafioId).single();
                 if(!desafio) return;
-
                 document.getElementById('titulo-prova').innerText = desafio.nome;
 
-                // 2. Lógica do Timer Dinâmico
+                // Lógica do Timer
                 const timerBox = document.getElementById('caixa-timer');
                 if (desafio.hora_largada && desafio.tempo_limite_horas) {
                     timerBox.style.display = 'block';
-                    document.getElementById('label-tempo').innerText = `Tempo para o Corte (${desafio.tempo_limite_horas}h)`;
-                    
-                    const largada = new Date(desafio.hora_largada);
-                    const limite = new Date(largada.getTime() + (desafio.tempo_limite_horas * 60 * 60 * 1000));
-                    
+                    const limite = new Date(new Date(desafio.hora_largada).getTime() + (desafio.tempo_limite_horas * 60 * 60 * 1000));
                     const diff = limite - new Date();
-                    if (diff <= 0) {
-                        document.getElementById('tempo-restante').innerText = "ENCERRADO";
-                    } else {
+                    if (diff <= 0) { document.getElementById('tempo-restante').innerText = "ENCERRADO"; }
+                    else {
                         const h = Math.floor(diff / 3600000);
                         const m = Math.floor((diff % 3600000) / 60000);
                         const s = Math.floor((diff % 60000) / 1000);
-                        document.getElementById('tempo-restante').innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                        document.getElementById('tempo-restante').innerText = `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
                     }
-                } else {
-                    timerBox.style.display = 'none';
                 }
 
-                // 3. Busca posições e calcula distância
                 const { data: posicoes } = await supabaseClient.from('posicoes').select('*').eq('desafio_id', desafioId).order('created_at', { ascending: true });
 
                 if (posicoes && posicoes.length > 0) {
-                    rastroReal.setLatLngs(posicoes.map(p => [p.lat, p.lng]));
+                    markersGroup.clearLayers(); // Limpa para redesenhar todos os check-ins
+                    const coordenadas = posicoes.map(p => [p.lat, p.lng]);
+                    rastroReal.setLatLngs(coordenadas);
+
                     let distTotal = 0;
-                    for (let i = 1; i < posicoes.length; i++) {
-                        distTotal += calcularDistancia(posicoes[i-1].lat, posicoes[i-1].lng, posicoes[i].lat, posicoes[i].lng);
-                    }
+                    posicoes.forEach((p, i) => {
+                        if (i > 0) distTotal += calcularDistancia(posicoes[i-1].lat, posicoes[i-1].lng, p.lat, p.lng);
+                        
+                        // Define se é a bike atual (última) ou rastro (anteriores)
+                        const isUltima = (i === posicoes.length - 1);
+                        const marker = L.marker([p.lat, p.lng], { 
+                            icon: isUltima ? bikeIconAtual : bikeIcon,
+                            opacity: isUltima ? 1 : 0.6 
+                        });
+                        
+                        const dataHora = new Date(p.created_at).toLocaleString('pt-BR');
+                        marker.bindPopup(`<b>Check-in #${i+1}</b><br>${dataHora}`);
+                        markersGroup.addLayer(marker);
+                    });
+
                     document.getElementById('dist-percorrida').innerText = distTotal.toFixed(1);
-                    if(desafio.distancia_km) {
-                        document.getElementById('dist-restante').innerText = Math.max(0, desafio.distancia_km - distTotal).toFixed(1);
-                    }
-                    const ultima = posicoes[posicoes.length - 1];
-                    markerAtleta.setLatLng([ultima.lat, ultima.lng]);
-                    document.getElementById('status').innerText = "Sinal: " + new Date(ultima.created_at).toLocaleTimeString();
+                    if(desafio.distancia_km) document.getElementById('dist-restante').innerText = Math.max(0, desafio.distancia_km - distTotal).toFixed(1);
+                    document.getElementById('status').innerText = "Total de Check-ins: " + posicoes.length;
+
+                    // Se não tiver GPX carregado, foca no rastro
+                    if (!gpxCarregado) map.fitBounds(rastroReal.getBounds());
                 }
             } catch (err) { console.error(err); }
         }
 
         atualizarDados();
-        setInterval(atualizarDados, 1000); // Atualiza o relógio a cada segundo
+        setInterval(atualizarDados, 10000); // Atualiza a cada 10 segundos
     </script>
 </body>
 </html>

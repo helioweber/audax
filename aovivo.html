@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Atleta - GPS</title>
+    <style>
+        body { 
+            background: #121212; color: white; font-family: -apple-system, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100vh; margin: 0;
+        }
+        .container { text-align: center; width: 90%; }
+        
+        #id-evento { 
+            color: #27ae60; font-weight: bold; font-size: 14px; 
+            margin-bottom: 20px; text-transform: uppercase;
+        }
+
+        .btn-enviar {
+            width: 220px; height: 220px; border-radius: 50%; border: none;
+            background: #27ae60; color: white; font-weight: bold; font-size: 1.2rem;
+            box-shadow: 0 0 30px rgba(39, 174, 96, 0.4); cursor: pointer;
+            transition: transform 0.1s, background 0.3s;
+        }
+        .btn-enviar:active { transform: scale(0.92); }
+
+        #msg { margin-top: 30px; font-size: 1rem; line-height: 1.4; color: #bbb; min-height: 3em; }
+        .instrucao { margin-top: 40px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="id-evento">Carregando evento...</div>
+        
+        <!-- Botão agora alterna entre Iniciar e Parar o rastreamento automático -->
+        <button class="btn-enviar" onclick="alternarRastreamento()">INICIAR<br>RASTREAMENTO</button>
+        
+        <div id="msg">Toque para iniciar o envio automático da sua localização.</div>
+
+        <div class="instrucao">
+            Mantenha a tela acesa e o GPS ativado durante o pedal.
+        </div>
+    </div>
+
+    <!-- BIBLIOTECA SUPABASE -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        // 1. CONFIGURAÇÕES DO SEU SUPABASE
+        const SUPABASE_URL = "https://xtawaddkssnwdigsniuw.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0YXdhZGRrc3Nud2RpZ3NuaXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxODk0NTksImV4cCI6MjEwMjc2NTQ1OX0.ef949wMDXluhu8yYeljbfNPWe-Rn4a034XQuMj7FUx8";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 2. CAPTURAR O ID DO EVENTO NA URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const desafioId = urlParams.get('id') || 'brm600';
+        
+        document.getElementById('id-evento').innerText = "Evento: " + desafioId;
+
+        let watchId = null;
+        let isRastreando = false;
+
+        // 3. FUNÇÃO DE RASTREAMENTO CONTÍNUO AUTOMÁTICO
+        function alternarRastreamento() {
+            const btn = document.querySelector('.btn-enviar');
+            const msg = document.getElementById('msg');
+
+            if (!isRastreando) {
+                // Iniciar rastreamento
+                if (!navigator.geolocation) {
+                    alert("Seu navegador não suporta geolocalização.");
+                    return;
+                }
+
+                isRastreando = true;
+                btn.innerText = "PARAR\nRASTREAMENTO";
+                btn.style.background = "#e74c3c"; // Muda para vermelho
+                msg.innerHTML = "<span style='color: #f1c40f;'>Rastreamento automático ativo...</span>";
+
+                // watchPosition fica escutando o movimento e envia novas posições automaticamente
+                watchId = navigator.geolocation.watchPosition(async (pos) => {
+                    const { latitude, longitude, altitude, speed } = pos.coords;
+
+                    // Envia os dados para a tabela 'posicoes' do Supabase
+                    const { error } = await supabaseClient.from('posicoes').insert([
+                        { 
+                            lat: latitude, 
+                            lng: longitude, 
+                            altitude: altitude, 
+                            velocidade: speed,
+                            desafio_id: desafioId 
+                        }
+                    ]);
+
+                    if (error) {
+                        console.error("Erro ao salvar no Supabase:", error.message);
+                    } else {
+                        msg.innerHTML = "<span style='color: #2ecc71;'>Posição enviada!<br>" + new Date().toLocaleTimeString() + "</span>";
+                    }
+                }, (err) => {
+                    let erroTxt = "Erro de GPS";
+                    if(err.code === 1) erroTxt = "Acesso ao GPS negado.";
+                    if(err.code === 2) erroTxt = "Posição indisponível.";
+                    if(err.code === 3) erroTxt = "Tempo esgotado.";
+                    
+                    msg.innerHTML = "<span style='color: #e74c3c;'>" + erroTxt + "</span>";
+                }, { 
+                    enableHighAccuracy: true, 
+                    timeout: 20000, 
+                    maximumAge: 0 
+                });
+
+            } else {
+                // Parar rastreamento
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                isRastreando = false;
+                btn.innerText = "INICIAR\nRASTREAMENTO";
+                btn.style.background = "#27ae60"; // Volta para verde
+                msg.innerHTML = "Rastreamento pausado.";
+            }
+        }
+    </script>
+</body>
+</html>
